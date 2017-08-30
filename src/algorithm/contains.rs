@@ -44,15 +44,7 @@ impl<T> Contains<Point<T>> for LineString<T>
     where T: Float
 {
     fn contains(&self, p: &Point<T>) -> bool {
-        let vect = &self.0;
-        // LineString without points
-        if vect.is_empty() {
-            return false;
-        }
-        // LineString with one point equal p
-        if vect.len() == 1 {
-            return vect[0].contains(p);
-        }
+        let vect = self.points();
         // check if point is a vertex
         if vect.contains(p) {
             return true;
@@ -101,7 +93,7 @@ impl<T> Contains<Line<T>> for LineString<T>
     fn contains(&self, line: &Line<T>) -> bool {
         let (p0, p1) = (line.start, line.end);
         let mut look_for: Option<Point<T>> = None;
-        for l in self.0.windows(2) {
+        for l in self.points().windows(2) {
             let segment = Line::new(l[0], l[1]);
             if look_for.is_none() {
                 // If segment contains an endpoint of line, we mark the other endpoint as the

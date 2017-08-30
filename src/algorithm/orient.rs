@@ -65,9 +65,6 @@ pub enum Direction {
 fn signed_ring_area<T>(linestring: &LineString<T>) -> T
     where T: Float
 {
-    if linestring.0.is_empty() || linestring.0.len() == 1 {
-        return T::zero();
-    }
     let mut tmp = T::zero();
     for ps in linestring.0.windows(2) {
         tmp = tmp + (ps[0].x() * ps[1].y() - ps[1].x() * ps[0].y());
@@ -88,17 +85,17 @@ fn orient<T>(poly: &Polygon<T>, direction: Direction) -> Polygon<T>
     let mut rings = vec![];
     // process interiors first, so push and pop work
     for ring in &poly.interiors {
-        if signed_ring_area(&ring) / sign <= T::zero() {
-            rings.push(LineString(ring.0.iter().cloned().collect()));
-        } else {
-            rings.push(LineString(ring.0.iter().rev().cloned().collect()));
+        let mut ring = ring.clone();
+        if signed_ring_area(&ring) / sign >= T::zero() {
+            ring.reverse();
         }
+        rings.push(LineString::new_unchecked(ring));
     }
-    if signed_ring_area(&poly.exterior) / sign >= T::zero() {
-        rings.push(LineString(poly.exterior.0.iter().cloned().collect()));
-    } else {
-        rings.push(LineString(poly.exterior.0.iter().rev().cloned().collect()));
+    let mut ring = poly.exterior.clone();
+    if signed_ring_area(&ring) / sign >= T::zero() {
+        ring.reverse();
     }
+    rings.push(LineString::new_unchecked(ring));
     Polygon::new(rings.pop().unwrap(), rings)
 }
 

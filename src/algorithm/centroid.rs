@@ -27,11 +27,8 @@ pub trait Centroid<T: Float> {
 fn simple_polygon_area<T>(linestring: &LineString<T>) -> T
     where T: Float
 {
-    if linestring.0.is_empty() || linestring.0.len() == 1 {
-        return T::zero();
-    }
     let mut tmp = T::zero();
-    for ps in linestring.0.windows(2) {
+    for ps in linestring.points().windows(2) {
         tmp = tmp + (ps[0].x() * ps[1].y() - ps[1].x() * ps[0].y());
     }
     tmp / (T::one() + T::one())
@@ -41,7 +38,7 @@ fn simple_polygon_area<T>(linestring: &LineString<T>) -> T
 fn simple_polygon_centroid<T>(poly_ext: &LineString<T>) -> Option<Point<T>>
     where T: Float + FromPrimitive
 {
-    let vect = &poly_ext.0;
+    let vect = &poly_ext.points();
     let area = simple_polygon_area(poly_ext);
     let mut sum_x = T::zero();
     let mut sum_y = T::zero();
@@ -71,25 +68,18 @@ impl<T> Centroid<T> for LineString<T>
     // The Centroid of a LineString is the mean of the middle of the segment
     // weighted by the length of the segments.
     fn centroid(&self) -> Option<Point<T>> {
-        let vect = &self.0;
-        if vect.is_empty() {
-            return None;
+        let vect = &self.points();
+        let mut sum_x = T::zero();
+        let mut sum_y = T::zero();
+        let mut total_length = T::zero();
+        for ps in vect.windows(2) {
+            let segment_len = ps[0].distance(&ps[1]);
+            let (x1, y1, x2, y2) = (ps[0].x(), ps[0].y(), ps[1].x(), ps[1].y());
+            total_length = total_length + segment_len;
+            sum_x = sum_x + segment_len * ((x1 + x2) / (T::one() + T::one()));
+            sum_y = sum_y + segment_len * ((y1 + y2) / (T::one() + T::one()));
         }
-        if vect.len() == 1 {
-            Some(Point::new(vect[0].x(), vect[0].y()))
-        } else {
-            let mut sum_x = T::zero();
-            let mut sum_y = T::zero();
-            let mut total_length = T::zero();
-            for ps in vect.windows(2) {
-                let segment_len = ps[0].distance(&ps[1]);
-                let (x1, y1, x2, y2) = (ps[0].x(), ps[0].y(), ps[1].x(), ps[1].y());
-                total_length = total_length + segment_len;
-                sum_x = sum_x + segment_len * ((x1 + x2) / (T::one() + T::one()));
-                sum_y = sum_y + segment_len * ((y1 + y2) / (T::one() + T::one()));
-            }
-            Some(Point::new(sum_x / total_length, sum_y / total_length))
-        }
+        Some(Point::new(sum_x / total_length, sum_y / total_length))
     }
 }
 
@@ -107,34 +97,27 @@ impl<T> Centroid<T> for Polygon<T>
     // See here for detail on alternative methods: https://fotino.me/calculating-centroids/
     fn centroid(&self) -> Option<Point<T>> {
         let linestring = &self.exterior;
-        let vect = &linestring.0;
-        if vect.is_empty() {
-            return None;
+        let vect = &linestring.points();
+        let external_centroid = simple_polygon_centroid(&self.exterior).unwrap();
+        if !self.interiors.is_empty() {
+            let external_area = simple_polygon_area(&self.exterior).abs();
+            // accumulate interior Polygons
+            let (totals_x, totals_y, internal_area) =
+                self.interiors
+                    .iter()
+                    .map(|ring| {
+                                let area = simple_polygon_area(ring).abs();
+                                let centroid = simple_polygon_centroid(ring).unwrap();
+                                ((centroid.x() * area), (centroid.y() * area), area)
+                            })
+                    .fold((T::zero(), T::zero(), T::zero()),
+                            |accum, val| (accum.0 + val.0, accum.1 + val.1, accum.2 + val.2));
+            return Some(Point::new(((external_centroid.x() * external_area) - totals_x) /
+                                    (external_area - internal_area),
+                                    ((external_centroid.y() * external_area) - totals_y) /
+                                    (external_area - internal_area)));
         }
-        if vect.len() == 1 {
-            Some(Point::new(vect[0].x(), vect[0].y()))
-        } else {
-            let external_centroid = simple_polygon_centroid(&self.exterior).unwrap();
-            if !self.interiors.is_empty() {
-                let external_area = simple_polygon_area(&self.exterior).abs();
-                // accumulate interior Polygons
-                let (totals_x, totals_y, internal_area) =
-                    self.interiors
-                        .iter()
-                        .map(|ring| {
-                                 let area = simple_polygon_area(ring).abs();
-                                 let centroid = simple_polygon_centroid(ring).unwrap();
-                                 ((centroid.x() * area), (centroid.y() * area), area)
-                             })
-                        .fold((T::zero(), T::zero(), T::zero()),
-                              |accum, val| (accum.0 + val.0, accum.1 + val.1, accum.2 + val.2));
-                return Some(Point::new(((external_centroid.x() * external_area) - totals_x) /
-                                       (external_area - internal_area),
-                                       ((external_centroid.y() * external_area) - totals_y) /
-                                       (external_area - internal_area)));
-            }
-            Some(external_centroid)
-        }
+        Some(external_centroid)
     }
 }
 

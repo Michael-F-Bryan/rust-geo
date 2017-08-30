@@ -453,7 +453,25 @@ impl<T> Line<T>
 /// ```
 ///
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct LineString<T>(pub Vec<Point<T>>) where T: Float;
+pub struct LineString<T>(Vec<Point<T>>) where T: Float;
+
+impl<T: Float> LineString<T> {
+    fn new(points: Vec<Point<T>>) -> Result<Self, ()> {
+        if points.len() < 2 {
+            Err(())
+        } else {
+            Ok(LineString(points))
+        }
+    }
+
+    pub unsafe fn new_unchecked(points: Vec<Point<T>>) -> Self {
+        LineString(points)
+    }
+
+    pub fn points(&self) -> &[Point<T>] {
+        &self.0
+    }
+}
 
 /// Turn a `Vec` of `Point`-ish objects into a `LineString`.
 impl<T: Float, IP: Into<Point<T>>> From<Vec<IP>> for LineString<T> {
